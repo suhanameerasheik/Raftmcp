@@ -1,14 +1,17 @@
 import os
 import tempfile
 
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, UploadFile, HTTPException
 
 from .config import NODE_ID
 from .node import RaftNode
+
 from .har.parser import parse_har
 from .har.extractor import extract_travel_requests
 from .har.sanitizer import sanitize_request
 from .har.generator import generate_tool_definitions
+
+from .mcp.server import call_tool, get_registered_tools
 
 
 app = FastAPI(title="RaftMCP for Travel")
@@ -64,3 +67,35 @@ async def get_tools():
         "count": len(generated_tools),
         "tools": generated_tools,
     }
+
+
+@app.get("/mcp/tools")
+async def list_mcp_tools():
+    return {
+        "count": len(get_registered_tools()),
+        "tools": get_registered_tools(),
+    }
+
+
+@app.post("/tools/search_flights")
+async def search_flights(arguments: dict):
+    try:
+        return call_tool("search_flights", arguments)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+
+@app.post("/tools/check_flight_status")
+async def check_flight_status(arguments: dict):
+    try:
+        return call_tool("check_flight_status", arguments)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+
+@app.post("/tools/search_hotels")
+async def search_hotels(arguments: dict):
+    try:
+        return call_tool("search_hotels", arguments)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
