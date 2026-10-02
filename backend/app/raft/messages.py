@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class RequestVoteRequest(BaseModel):
@@ -19,3 +19,18 @@ class HeartbeatRequest(BaseModel):
 class HeartbeatResponse(BaseModel):
     term: int
     success: bool
+
+
+class AppendEntriesRequest(BaseModel):
+    term: int
+    leader_id: str
+    prev_log_index: int = 0
+    prev_log_term: int = 0
+    entries: list[dict] = Field(default_factory=list)
+    leader_commit: int = 0
+
+
+class AppendEntriesResponse(BaseModel):
+    term: int
+    success: bool
+    match_index: int = 0

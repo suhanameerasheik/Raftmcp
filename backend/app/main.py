@@ -9,7 +9,11 @@ from .config import NODE_ID, PEERS
 from .node import RaftNode
 
 from .raft.node import RaftRuntime
-from .raft.messages import RequestVoteRequest, HeartbeatRequest
+from .raft.messages import (
+    RequestVoteRequest,
+    HeartbeatRequest,
+    AppendEntriesRequest,
+)
 from .raft.heartbeat import HeartbeatManager
 
 from .har.parser import parse_har
@@ -74,6 +78,11 @@ async def raft_status():
     return raft.status()
 
 
+@app.get("/raft/log")
+async def raft_log():
+    return raft.log_status()
+
+
 @app.post("/raft/request-vote")
 async def request_vote(request: RequestVoteRequest):
     return raft.handle_request_vote(request)
@@ -82,6 +91,38 @@ async def request_vote(request: RequestVoteRequest):
 @app.post("/raft/heartbeat")
 async def receive_heartbeat(request: HeartbeatRequest):
     return heartbeat_manager.receive_heartbeat(request)
+
+
+@app.post("/raft/append-entries")
+async def append_entries(request: AppendEntriesRequest):
+    return raft.handle_append_entries(request)
+
+
+@app.post("/raft/command")
+async def submit_command(command: dict):
+    if raft.state.role != raft.state.role.LEADER:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "This node is not the leader.",
+                "leader_id": raft.state.leader_id,
+            },
+        )
+
+    if command.get("command") != "ADD_TOOL":
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported command. Use ADD_TOOL.",
+        )
+
+    tool = command.get("tool")
+    if not isinstance(tool, dict) or not tool.get("name"):
+        raise HTTPException(
+            status_code=400,
+            detail="ADD_TOOL requires a tool object with a name.",
+        )
+
+    return await raft.submit_command(command)
 
 
 @app.post("/tools/generate")

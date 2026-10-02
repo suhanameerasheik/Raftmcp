@@ -1,9 +1,14 @@
+
 import asyncio
 
 import httpx
 
 from .election import ElectionManager
-from .messages import HeartbeatRequest, HeartbeatResponse
+from .messages import (
+    AppendEntriesRequest,
+    HeartbeatRequest,
+    HeartbeatResponse,
+)
 from .state import NodeRole, RaftState
 
 
@@ -42,6 +47,45 @@ class HeartbeatManager:
             success=True,
         )
 
+    async def synchronize_peer(
+        self,
+        client: httpx.AsyncClient,
+        peer_id: str,
+        peer_url: str,
+    ):
+        if self.state.role != NodeRole.LEADER:
+            return
+
+        request = AppendEntriesRequest(
+            term=self.state.current_term,
+            leader_id=self.state.node_id,
+            prev_log_index=0,
+            prev_log_term=0,
+            entries=[
+                entry.to_dict() for entry in self.state.log
+            ],
+            leader_commit=self.state.commit_index,
+        )
+
+        try:
+            response = await client.post(
+                f"{peer_url}/raft/append-entries",
+                json=request.model_dump(),
+            )
+            response.raise_for_status()
+            result = response.json()
+
+            if result.get("term", 0) > self.state.current_term:
+                self.state.current_term = result["term"]
+                self.state.role = NodeRole.FOLLOWER
+                self.state.voted_for = None
+                self.state.leader_id = None
+                self.state.votes_received.clear()
+                self.election.reset_timeout()
+
+        except (httpx.HTTPError, ValueError):
+            pass
+
     async def send_heartbeat(
         self,
         client: httpx.AsyncClient,
@@ -70,6 +114,15 @@ class HeartbeatManager:
                 self.state.voted_for = None
                 self.state.leader_id = None
                 self.state.votes_received.clear()
+                self.election.reset_timeout()
+                return
+
+            if result.get("success", False):
+                await self.synchronize_peer(
+                    client,
+                    peer_id,
+                    peer_url,
+                )
 
         except (httpx.HTTPError, ValueError):
             pass
@@ -79,7 +132,11 @@ class HeartbeatManager:
             while True:
                 if self.state.role == NodeRole.LEADER:
                     tasks = [
-                        self.send_heartbeat(client, peer_id, peer_url)
+                        self.send_heartbeat(
+                            client,
+                            peer_id,
+                            peer_url,
+                        )
                         for peer_id, peer_url in self.peers.items()
                     ]
                     await asyncio.gather(*tasks)
