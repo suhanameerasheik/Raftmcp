@@ -1,10 +1,16 @@
+import asyncio
 import os
 import tempfile
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, File, UploadFile, HTTPException
 
-from .config import NODE_ID
+from .config import NODE_ID, PEERS
 from .node import RaftNode
+
+from .raft.node import RaftRuntime
+from .raft.messages import RequestVoteRequest, HeartbeatRequest
+from .raft.heartbeat import HeartbeatManager
 
 from .har.parser import parse_har
 from .har.extractor import extract_travel_requests
@@ -14,16 +20,68 @@ from .har.generator import generate_tool_definitions
 from .mcp.server import call_tool, get_registered_tools
 
 
-app = FastAPI(title="RaftMCP for Travel")
-
 node = RaftNode(node_id=NODE_ID)
 
+raft = RaftRuntime(
+    node_id=NODE_ID,
+    peers=PEERS,
+)
+
+heartbeat_manager = HeartbeatManager(
+    raft.state,
+    raft.election,
+    peers=PEERS,
+)
+
 generated_tools = []
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    election_task = asyncio.create_task(
+        raft.run_election_loop()
+    )
+    heartbeat_task = asyncio.create_task(
+        heartbeat_manager.run_heartbeat_loop()
+    )
+
+    try:
+        yield
+    finally:
+        election_task.cancel()
+        heartbeat_task.cancel()
+
+        await asyncio.gather(
+            election_task,
+            heartbeat_task,
+            return_exceptions=True,
+        )
+
+
+app = FastAPI(
+    title="RaftMCP for Travel",
+    lifespan=lifespan,
+)
 
 
 @app.get("/health")
 async def health():
     return node.health()
+
+
+@app.get("/raft/status")
+async def raft_status():
+    return raft.status()
+
+
+@app.post("/raft/request-vote")
+async def request_vote(request: RequestVoteRequest):
+    return raft.handle_request_vote(request)
+
+
+@app.post("/raft/heartbeat")
+async def receive_heartbeat(request: HeartbeatRequest):
+    return heartbeat_manager.receive_heartbeat(request)
 
 
 @app.post("/tools/generate")
