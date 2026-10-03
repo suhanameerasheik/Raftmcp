@@ -41,6 +41,9 @@ class RaftState:
     applied_commands: list[dict[str, Any]] = field(default_factory=list)
     registry: ToolRegistry = field(default_factory=ToolRegistry)
 
+    # Day 7: simulated availability for failure and recovery demos.
+    is_active: bool = True
+
     def append_entry(self, term: int, command: dict[str, Any]) -> LogEntry:
         entry = LogEntry(
             index=len(self.log) + 1,

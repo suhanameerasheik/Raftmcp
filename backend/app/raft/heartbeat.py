@@ -27,6 +27,12 @@ class HeartbeatManager:
     def receive_heartbeat(
         self, request: HeartbeatRequest
     ) -> HeartbeatResponse:
+        if not self.state.is_active:
+            return HeartbeatResponse(
+                term=self.state.current_term,
+                success=False,
+            )
+
         if request.term < self.state.current_term:
             return HeartbeatResponse(
                 term=self.state.current_term,
@@ -53,7 +59,7 @@ class HeartbeatManager:
         peer_id: str,
         peer_url: str,
     ):
-        if self.state.role != NodeRole.LEADER:
+        if not self.state.is_active or self.state.role != NodeRole.LEADER:
             return
 
         request = AppendEntriesRequest(
@@ -92,7 +98,7 @@ class HeartbeatManager:
         peer_id: str,
         peer_url: str,
     ):
-        if self.state.role != NodeRole.LEADER:
+        if not self.state.is_active or self.state.role != NodeRole.LEADER:
             return
 
         request = HeartbeatRequest(
@@ -130,7 +136,10 @@ class HeartbeatManager:
     async def run_heartbeat_loop(self):
         async with httpx.AsyncClient(timeout=1.0) as client:
             while True:
-                if self.state.role == NodeRole.LEADER:
+                if (
+                    self.state.is_active
+                    and self.state.role == NodeRole.LEADER
+                ):
                     tasks = [
                         self.send_heartbeat(
                             client,

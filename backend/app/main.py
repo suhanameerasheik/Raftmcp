@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 
 import httpx
 from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi.responses import JSONResponse
 
 from .config import NODE_ID, PEERS, CLUSTER_NODES
 from .node import RaftNode
@@ -76,6 +77,31 @@ app = FastAPI(
 )
 
 
+@app.middleware("http")
+async def reject_requests_when_inactive(request, call_next):
+    allowed_while_inactive = {
+        "/admin/kill",
+        "/admin/restart",
+        "/raft/status",
+        "/raft/log",
+        "/health",
+    }
+
+    if (
+        not raft.state.is_active
+        and request.url.path not in allowed_while_inactive
+    ):
+        return JSONResponse(
+            status_code=503,
+            content={
+                "detail": "Node is inactive.",
+                "node_id": NODE_ID,
+            },
+        )
+
+    return await call_next(request)
+
+
 async def submit_registry_command(command: dict) -> dict:
     try:
         validate_command(command)
@@ -117,12 +143,17 @@ async def submit_registry_command(command: dict) -> dict:
             return response.json()
 
     except httpx.HTTPStatusError as error:
-        raise HTTPException(
-            status_code=error.response.status_code,
-            detail=error.response.json().get(
+        try:
+            detail = error.response.json().get(
                 "detail",
                 "Leader rejected the registry command.",
-            ),
+            )
+        except ValueError:
+            detail = "Leader rejected the registry command."
+
+        raise HTTPException(
+            status_code=error.response.status_code,
+            detail=detail,
         )
     except (httpx.HTTPError, ValueError):
         raise HTTPException(
@@ -131,9 +162,58 @@ async def submit_registry_command(command: dict) -> dict:
         )
 
 
+@app.post("/admin/kill")
+async def simulate_node_failure():
+    if not raft.state.is_active:
+        return {
+            "success": True,
+            "message": "Node is already inactive.",
+            "node_id": NODE_ID,
+        }
+
+    raft.state.is_active = False
+    raft.state.role = NodeRole.FOLLOWER
+    raft.state.leader_id = None
+    raft.state.votes_received.clear()
+
+    return {
+        "success": True,
+        "message": "Node failure simulated.",
+        "node_id": NODE_ID,
+        "is_active": raft.state.is_active,
+    }
+
+
+@app.post("/admin/restart")
+async def restart_node():
+    if raft.state.is_active:
+        return {
+            "success": True,
+            "message": "Node is already active.",
+            "node_id": NODE_ID,
+            "is_active": True,
+        }
+
+    raft.state.is_active = True
+    raft.state.role = NodeRole.FOLLOWER
+    raft.state.leader_id = None
+    raft.state.voted_for = None
+    raft.state.votes_received.clear()
+    raft.election.reset_timeout()
+
+    return {
+        "success": True,
+        "message": "Node reactivated. Waiting for cluster synchronization.",
+        "node_id": NODE_ID,
+        "is_active": True,
+    }
+
+
 @app.get("/health")
 async def health():
-    return node.health()
+    result = node.health()
+    result["is_active"] = raft.state.is_active
+    return result
 
 
 @app.get("/raft/status")
@@ -180,6 +260,74 @@ async def get_registry_tools():
         "count": len(tools),
         "commit_index": raft.state.commit_index,
         "tools": tools,
+    }
+
+
+@app.get("/cluster/consistency")
+async def cluster_consistency():
+    node_urls = {
+        NODE_ID: None,
+        **{
+            peer_id: peer_url
+            for peer_id, peer_url in CLUSTER_NODES.items()
+            if peer_id != NODE_ID
+        },
+    }
+
+    reports = {}
+    unavailable = []
+
+    async with httpx.AsyncClient(timeout=3.0) as client:
+        for node_id, url in node_urls.items():
+            try:
+                if node_id == NODE_ID:
+                    response_data = {
+                        "node_id": NODE_ID,
+                        "count": len(raft.state.registry.list_tools()),
+                        "commit_index": raft.state.commit_index,
+                        "tools": raft.state.registry.list_tools(),
+                    }
+                else:
+                    response = await client.get(
+                        f"{url}/registry/tools"
+                    )
+                    response.raise_for_status()
+                    response_data = response.json()
+
+                reports[node_id] = {
+                    "count": response_data.get("count"),
+                    "commit_index": response_data.get("commit_index"),
+                    "tools": response_data.get("tools", []),
+                }
+
+            except (httpx.HTTPError, ValueError):
+                unavailable.append(node_id)
+
+    if unavailable:
+        status = "UNAVAILABLE"
+    else:
+        signatures = {
+            node_id: sorted(
+                report["tools"],
+                key=lambda item: item.get("name", ""),
+            )
+            for node_id, report in reports.items()
+        }
+
+        first_signature = next(iter(signatures.values()), [])
+        all_match = all(
+            signature == first_signature
+            for signature in signatures.values()
+        )
+
+        status = "CONSISTENT" if all_match else "INCONSISTENT"
+
+    return {
+        "status": status,
+        "node_count": len(node_urls),
+        "available_nodes": list(reports.keys()),
+        "unavailable_nodes": unavailable,
+        "nodes": reports,
     }
 
 

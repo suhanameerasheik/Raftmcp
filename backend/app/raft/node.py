@@ -29,6 +29,7 @@ class RaftRuntime:
             "term": self.state.current_term,
             "voted_for": self.state.voted_for,
             "leader_id": self.state.leader_id,
+            "is_active": self.state.is_active,
         }
 
     def log_status(self) -> dict:
@@ -42,11 +43,19 @@ class RaftRuntime:
         }
 
     def start_election(self):
+        if not self.state.is_active:
+            return
         self.election.start_election()
 
     def handle_request_vote(
         self, request: RequestVoteRequest
     ) -> RequestVoteResponse:
+        if not self.state.is_active:
+            return RequestVoteResponse(
+                term=self.state.current_term,
+                vote_granted=False,
+            )
+
         if request.term < self.state.current_term:
             return RequestVoteResponse(
                 term=self.state.current_term,
@@ -77,6 +86,13 @@ class RaftRuntime:
     def handle_append_entries(
         self, request: AppendEntriesRequest
     ) -> AppendEntriesResponse:
+        if not self.state.is_active:
+            return AppendEntriesResponse(
+                term=self.state.current_term,
+                success=False,
+                match_index=len(self.state.log),
+            )
+
         if request.term < self.state.current_term:
             return AppendEntriesResponse(
                 term=self.state.current_term,
@@ -169,13 +185,23 @@ class RaftRuntime:
         peer_url: str,
         entry: LogEntry | None = None,
     ) -> tuple[str, dict | None]:
-        if self.state.role != NodeRole.LEADER:
+        if (
+            not self.state.is_active
+            or self.state.role != NodeRole.LEADER
+        ):
             return peer_id, None
 
-        next_index = len(self.state.log) if entry is None else entry.index - 1
+        next_index = (
+            len(self.state.log)
+            if entry is None
+            else entry.index - 1
+        )
 
         for _ in range(len(self.state.log) + 1):
-            if self.state.role != NodeRole.LEADER:
+            if (
+                not self.state.is_active
+                or self.state.role != NodeRole.LEADER
+            ):
                 return peer_id, None
 
             previous_index = next_index
@@ -229,6 +255,9 @@ class RaftRuntime:
         validate_command(command)
 
         async with self.write_lock:
+            if not self.state.is_active:
+                raise RuntimeError("This node is inactive.")
+
             if self.state.role != NodeRole.LEADER:
                 raise RuntimeError("This node is not the leader.")
 
@@ -251,7 +280,8 @@ class RaftRuntime:
                 results = await asyncio.gather(*tasks)
 
             if (
-                self.state.role != NodeRole.LEADER
+                not self.state.is_active
+                or self.state.role != NodeRole.LEADER
                 or self.state.current_term != entry_term
             ):
                 return {
@@ -312,6 +342,9 @@ class RaftRuntime:
             }
 
     async def broadcast_commit(self):
+        if not self.state.is_active:
+            return
+
         async with httpx.AsyncClient(timeout=2.0) as client:
             tasks = [
                 self.replicate_to_peer(
@@ -330,6 +363,9 @@ class RaftRuntime:
         peer_url: str,
         term: int,
     ) -> tuple[str, dict | None]:
+        if not self.state.is_active:
+            return peer_id, None
+
         request = RequestVoteRequest(
             term=term,
             candidate_id=self.state.node_id,
@@ -347,7 +383,10 @@ class RaftRuntime:
 
     async def run_election_round(self):
         async with self.election_lock:
-            if self.state.role == NodeRole.LEADER:
+            if (
+                not self.state.is_active
+                or self.state.role == NodeRole.LEADER
+            ):
                 return
 
             self.start_election()
@@ -366,7 +405,8 @@ class RaftRuntime:
                 results = await asyncio.gather(*tasks)
 
             if (
-                self.state.role != NodeRole.CANDIDATE
+                not self.state.is_active
+                or self.state.role != NodeRole.CANDIDATE
                 or self.state.current_term != election_term
             ):
                 return
@@ -389,7 +429,10 @@ class RaftRuntime:
                 if result.get("vote_granted", False):
                     self.state.votes_received.add(peer_id)
 
-            if self.state.current_term == election_term:
+            if (
+                self.state.is_active
+                and self.state.current_term == election_term
+            ):
                 self.election.become_leader(
                     cluster_size=len(self.peers) + 1
                 )
@@ -397,7 +440,8 @@ class RaftRuntime:
     async def run_election_loop(self):
         while True:
             if (
-                self.state.role != NodeRole.LEADER
+                self.state.is_active
+                and self.state.role != NodeRole.LEADER
                 and self.election.timeout_expired()
             ):
                 await self.run_election_round()
