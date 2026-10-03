@@ -11,6 +11,7 @@ from .messages import (
     RequestVoteResponse,
 )
 from .state import LogEntry, NodeRole, RaftState
+from ..registry.commands import validate_command
 
 
 class RaftRuntime:
@@ -101,6 +102,7 @@ class RaftRuntime:
 
         if request.prev_log_index > 0:
             previous_entry = self.state.log[request.prev_log_index - 1]
+
             if previous_entry.term != request.prev_log_term:
                 return AppendEntriesResponse(
                     term=self.state.current_term,
@@ -170,8 +172,6 @@ class RaftRuntime:
         if self.state.role != NodeRole.LEADER:
             return peer_id, None
 
-        # Send the full missing suffix, starting from the follower's
-        # reported log position. A failed request backs up the index.
         next_index = len(self.state.log) if entry is None else entry.index - 1
 
         for _ in range(len(self.state.log) + 1):
@@ -226,6 +226,8 @@ class RaftRuntime:
         return peer_id, None
 
     async def submit_command(self, command: dict) -> dict:
+        validate_command(command)
+
         async with self.write_lock:
             if self.state.role != NodeRole.LEADER:
                 raise RuntimeError("This node is not the leader.")

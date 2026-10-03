@@ -1,6 +1,9 @@
+
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
+
+from ..registry.registry import ToolRegistry
 
 
 class NodeRole(str, Enum):
@@ -36,6 +39,7 @@ class RaftState:
     commit_index: int = 0
     last_applied: int = 0
     applied_commands: list[dict[str, Any]] = field(default_factory=list)
+    registry: ToolRegistry = field(default_factory=ToolRegistry)
 
     def append_entry(self, term: int, command: dict[str, Any]) -> LogEntry:
         entry = LogEntry(
@@ -49,5 +53,7 @@ class RaftState:
     def apply_committed_entries(self):
         while self.last_applied < self.commit_index:
             entry = self.log[self.last_applied]
+
+            self.registry.apply_committed_command(entry.command)
             self.applied_commands.append(entry.command)
             self.last_applied += 1
