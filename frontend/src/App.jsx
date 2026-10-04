@@ -8,7 +8,29 @@ const NODES = [
   { id: 'node-3', port: 8003 },
 ]
 
-const API = 'http://127.0.0.1:8001'
+const API_NODES = NODES.map(
+  (node) => `http://127.0.0.1:${node.port}`
+)
+
+async function fetchFromAvailableNode(path) {
+  let lastError
+
+  for (const baseURL of API_NODES) {
+    try {
+      const response = await fetch(`${baseURL}${path}`)
+
+      if (!response.ok) {
+        throw new Error(`Request failed: ${response.status}`)
+      }
+
+      return await response.json()
+    } catch (err) {
+      lastError = err
+    }
+  }
+
+  throw lastError || new Error('All cluster nodes are unavailable')
+}
 
 function App() {
   const [cluster, setCluster] = useState(null)
@@ -22,13 +44,8 @@ function App() {
 
   async function fetchCluster() {
     try {
-      const response = await fetch(`${API}/demo/state`)
+      const data = await fetchFromAvailableNode('/demo/state')
 
-      if (!response.ok) {
-        throw new Error('Unable to fetch cluster state')
-      }
-
-      const data = await response.json()
       setCluster(data)
       setLastUpdated(new Date().toLocaleTimeString())
       setError('')
@@ -39,13 +56,8 @@ function App() {
 
   async function fetchRaftLog() {
     try {
-      const response = await fetch(`${API}/raft/log`)
+      const data = await fetchFromAvailableNode('/raft/log')
 
-      if (!response.ok) {
-        throw new Error('Unable to fetch Raft log')
-      }
-
-      const data = await response.json()
       setRaftLog(data)
       setLogError('')
     } catch (err) {
