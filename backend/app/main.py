@@ -31,6 +31,8 @@ from .registry.commands import (
     DELETE_TOOL,
     validate_command,
 )
+from .agent.workflow import TravelWorkflow
+
 
 
 node = RaftNode(node_id=NODE_ID)
@@ -75,6 +77,7 @@ app = FastAPI(
     title="RaftMCP for Travel",
     lifespan=lifespan,
 )
+travel_workflow = TravelWorkflow()
 
 
 @app.middleware("http")
@@ -443,3 +446,104 @@ async def search_hotels(arguments: dict):
         return call_tool("search_hotels", arguments)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error))
+@app.post("/agent/request")
+async def agent_request(payload: dict):
+    user_request = payload.get("request", "")
+
+    try:
+        return await travel_workflow.process_request(user_request)
+
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+    except RuntimeError as error:
+        raise HTTPException(status_code=503, detail=str(error))
+
+@app.get("/demo/state")
+async def demo_state():
+    nodes = {}
+
+    async with httpx.AsyncClient(timeout=3.0) as client:
+        for node_id, url in CLUSTER_NODES.items():
+            try:
+                status_response = await client.get(
+                    f"{url}/raft/status"
+                )
+                status_response.raise_for_status()
+                status_data = status_response.json()
+
+                log_response = await client.get(
+                    f"{url}/raft/log"
+                )
+                log_response.raise_for_status()
+                log_data = log_response.json()
+
+                registry_response = await client.get(
+                    f"{url}/registry/tools"
+                )
+                registry_response.raise_for_status()
+                registry_data = registry_response.json()
+
+                nodes[node_id] = {
+                    "health": "healthy",
+                    "role": status_data.get("role"),
+                    "term": status_data.get("term"),
+                    "is_active": status_data.get("is_active"),
+                    "commit_index": log_data.get("commit_index"),
+                    "tools": registry_data.get("tools", []),
+                }
+
+            except httpx.HTTPError:
+                nodes[node_id] = {
+                    "health": "unavailable",
+                    "role": None,
+                    "term": None,
+                    "is_active": False,
+                    "commit_index": None,
+                    "tools": [],
+                }
+
+    leader_id = next(
+        (
+            node_id
+            for node_id, details in nodes.items()
+            if details.get("role") == "leader"
+            and details.get("is_active")
+        ),
+        None,
+    )
+
+    active_tools = (
+        nodes[leader_id]["tools"]
+        if leader_id
+        else []
+    )
+
+    return {
+        "current_leader": leader_id,
+        "nodes": nodes,
+        "active_tools": active_tools,
+    }   
+      
+@app.post("/demo/travel-request")
+async def demo_travel_request(payload: dict):
+    user_request = payload.get("request", "")
+
+    try:
+        result = await travel_workflow.process_request(user_request)
+        return {
+            "request": user_request,
+            "result": result,
+        }
+
+    except ValueError as error:
+        raise HTTPException(
+            status_code=400,
+            detail=str(error),
+        )
+
+    except RuntimeError as error:
+        raise HTTPException(
+            status_code=503,
+            detail=str(error),
+        )
