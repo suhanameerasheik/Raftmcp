@@ -1,4 +1,3 @@
-
 import asyncio
 import os
 import tempfile
@@ -6,6 +5,7 @@ from contextlib import asynccontextmanager
 
 import httpx
 from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .config import NODE_ID, PEERS, CLUSTER_NODES
@@ -32,7 +32,6 @@ from .registry.commands import (
     validate_command,
 )
 from .agent.workflow import TravelWorkflow
-
 
 
 node = RaftNode(node_id=NODE_ID)
@@ -73,10 +72,26 @@ async def lifespan(app: FastAPI):
         )
 
 
+# Create the FastAPI application before adding middleware.
 app = FastAPI(
     title="RaftMCP for Travel",
     lifespan=lifespan,
 )
+
+# Allow the local React/Vite frontend to access the backend.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:5174",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 travel_workflow = TravelWorkflow()
 
 
@@ -158,6 +173,7 @@ async def submit_registry_command(command: dict) -> dict:
             status_code=error.response.status_code,
             detail=detail,
         )
+
     except (httpx.HTTPError, ValueError):
         raise HTTPException(
             status_code=502,
@@ -429,7 +445,10 @@ async def search_flights(arguments: dict):
     try:
         return call_tool("search_flights", arguments)
     except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error))
+        raise HTTPException(
+            status_code=400,
+            detail=str(error),
+        )
 
 
 @app.post("/tools/check_flight_status")
@@ -437,7 +456,10 @@ async def check_flight_status(arguments: dict):
     try:
         return call_tool("check_flight_status", arguments)
     except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error))
+        raise HTTPException(
+            status_code=400,
+            detail=str(error),
+        )
 
 
 @app.post("/tools/search_hotels")
@@ -445,7 +467,12 @@ async def search_hotels(arguments: dict):
     try:
         return call_tool("search_hotels", arguments)
     except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error))
+        raise HTTPException(
+            status_code=400,
+            detail=str(error),
+        )
+
+
 @app.post("/agent/request")
 async def agent_request(payload: dict):
     user_request = payload.get("request", "")
@@ -454,10 +481,17 @@ async def agent_request(payload: dict):
         return await travel_workflow.process_request(user_request)
 
     except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error))
+        raise HTTPException(
+            status_code=400,
+            detail=str(error),
+        )
 
     except RuntimeError as error:
-        raise HTTPException(status_code=503, detail=str(error))
+        raise HTTPException(
+            status_code=503,
+            detail=str(error),
+        )
+
 
 @app.get("/demo/state")
 async def demo_state():
@@ -523,8 +557,9 @@ async def demo_state():
         "current_leader": leader_id,
         "nodes": nodes,
         "active_tools": active_tools,
-    }   
-      
+    }
+
+
 @app.post("/demo/travel-request")
 async def demo_travel_request(payload: dict):
     user_request = payload.get("request", "")
