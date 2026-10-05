@@ -83,3 +83,203 @@ main {
 .page h1 {
   margin-top: 0;
 }
+/* Day 12 - Travel Home */
+
+.home-page {
+  max-width: 1100px;
+}
+
+.hero {
+  text-align: center;
+  margin-bottom: 35px;
+}
+
+.hero h1 {
+  font-size: 42px;
+  margin-bottom: 12px;
+}
+
+.hero p {
+  color: #64748b;
+  font-size: 18px;
+}
+
+.search-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  padding: 28px;
+  margin-bottom: 40px;
+}
+
+.search-card h2 {
+  margin-top: 0;
+}
+
+.search-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin: 24px 0;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-group label {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.form-group select,
+.form-group input {
+  padding: 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: white;
+  font-size: 14px;
+}
+
+.primary-button {
+  border: none;
+  border-radius: 8px;
+  padding: 13px 22px;
+  background: #111827;
+  color: white;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primary-button:hover {
+  background: #374151;
+}
+
+.primary-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.error-message {
+  color: #dc2626;
+  margin-bottom: 15px;
+}
+
+.destination-section {
+  margin-bottom: 35px;
+}
+
+.destination-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+
+.destination-card {
+  background: #ffffff;
+  padding: 24px;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+}
+
+.destination-card h3 {
+  margin-top: 0;
+}
+
+.destination-card p {
+  color: #64748b;
+}
+
+.quick-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.quick-actions button {
+  padding: 12px 18px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: white;
+  cursor: pointer;
+}
+
+/* Day 12 - Flight Results */
+
+.flight-results {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: 30px;
+}
+
+.flight-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 24px;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.flight-card h2 {
+  margin: 0 0 8px;
+}
+
+.flight-card p {
+  margin: 6px 0;
+}
+
+.flight-card button {
+  border: none;
+  border-radius: 8px;
+  padding: 11px 18px;
+  background: #111827;
+  color: white;
+  cursor: pointer;
+}
+
+.flight-card button:hover {
+  background: #374151;
+}
+
+@media (max-width: 800px) {
+  .search-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .destination-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .flight-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 500px) {
+  main {
+    padding: 20px;
+  }
+
+  .page {
+    padding: 24px;
+  }
+
+  .search-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .navbar {
+    padding: 15px 20px;
+  }
+
+  .status-bar {
+    padding: 10px 20px;
+  }
+}

@@ -15,6 +15,7 @@ import "./App.css";
 function App() {
   const [currentPage, setCurrentPage] = useState("Home");
   const [backendStatus, setBackendStatus] = useState("Checking...");
+  const [flightSearchData, setFlightSearchData] = useState(null);
 
   useEffect(() => {
     async function checkBackend() {
@@ -29,10 +30,15 @@ function App() {
     checkBackend();
   }, []);
 
+  function handleFlightSearch(data) {
+    setFlightSearchData(data);
+    setCurrentPage("Flights");
+  }
+
   function renderPage() {
     switch (currentPage) {
       case "Flights":
-        return <Flights />;
+        return <Flights searchData={flightSearchData} />;
 
       case "Hotels":
         return <Hotels />;
@@ -45,7 +51,7 @@ function App() {
 
       case "Home":
       default:
-        return <Home />;
+        return <Home onFlightSearch={handleFlightSearch} />;
     }
   }
 

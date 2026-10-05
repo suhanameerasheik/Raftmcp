@@ -1,3 +1,4 @@
+
 const API_NODES = [
   "http://127.0.0.1:8001",
   "http://127.0.0.1:8002",
@@ -44,6 +45,26 @@ export async function sendTravelRequest(request) {
     },
     body: JSON.stringify({
       request,
+    }),
+  });
+}
+
+export async function searchFlights({
+  origin,
+  destination,
+  departure_date,
+  passengers,
+}) {
+  return fetchFromAvailableNode("/tools/search_flights", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      origin,
+      destination,
+      departure_date,
+      passengers,
     }),
   });
 }
