@@ -51,7 +51,10 @@ function App() {
 
       case "Home":
       default:
-        return <Home onFlightSearch={handleFlightSearch} />;
+        return <Home
+  onFlightSearch={handleFlightSearch}
+  onNavigate={setCurrentPage}
+/>;
     }
   }
 

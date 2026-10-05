@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { searchFlights } from "../services/api";
 
-function Home({ onFlightSearch }) {
+function Home({ onFlightSearch, onNavigate }) {
   const [origin, setOrigin] = useState("DEL");
   const [destination, setDestination] = useState("BLR");
   const [departureDate, setDepartureDate] = useState("");
@@ -153,9 +153,20 @@ function Home({ onFlightSearch }) {
       </section>
 
       <section className="quick-actions">
-        <button type="button">Search Hotels</button>
-        <button type="button">AI Travel Assistant</button>
-      </section>
+  <button
+    type="button"
+    onClick={() => onNavigate("Hotels")}
+  >
+    Search Hotels
+  </button>
+
+  <button
+    type="button"
+    onClick={() => onNavigate("AI Assistant")}
+  >
+    AI Travel Assistant
+  </button>
+</section>
     </div>
   );
 }
