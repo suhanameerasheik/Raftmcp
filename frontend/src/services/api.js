@@ -68,3 +68,14 @@ export async function searchFlights({
     }),
   });
 }
+export async function sendAgentRequest(request) {
+  return fetchFromAvailableNode("/agent/request", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      request,
+    }),
+  });
+}

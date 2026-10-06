@@ -1,7 +1,18 @@
-
 import re
 
 from app.agent.agent import TravelAgent
+
+
+AIRPORT_CODES = {
+    "delhi": "DEL",
+    "mumbai": "BOM",
+    "bangalore": "BLR",
+    "bengaluru": "BLR",
+    "hyderabad": "HYD",
+    "chennai": "MAA",
+    "kolkata": "CCU",
+    "pune": "PNQ",
+}
 
 
 class TravelWorkflow:
@@ -47,11 +58,24 @@ class TravelWorkflow:
                     "Search flights from Hyderabad to Delhi."
                 )
 
+            origin = match.group(1).strip()
+            destination = match.group(2).strip()
+
+            origin_code = AIRPORT_CODES.get(
+                origin.lower(),
+                origin,
+            )
+
+            destination_code = AIRPORT_CODES.get(
+                destination.lower(),
+                destination,
+            )
+
             return await self.agent.call_tool(
                 "search_flights",
                 {
-                    "origin": match.group(1).strip(),
-                    "destination": match.group(2).strip(),
+                    "origin": origin_code,
+                    "destination": destination_code,
                 },
             )
 
