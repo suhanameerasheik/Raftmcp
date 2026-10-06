@@ -79,3 +79,46 @@ export async function sendAgentRequest(request) {
     }),
   });
 }
+export async function searchHotels({
+  city,
+  check_in,
+  check_out,
+  guests,
+}) {
+  return fetchFromAvailableNode("/tools/search_hotels", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      city,
+      check_in,
+      check_out,
+      guests,
+    }),
+  });
+}
+export async function bookHotel({
+  hotel,
+  city,
+  check_in,
+  check_out,
+  guests,
+}) {
+  return fetchFromAvailableNode("/tools/book_hotel", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      hotel,
+      city,
+      check_in,
+      check_out,
+      guests,
+    }),
+  });
+}
+export async function getTrips() {
+  return fetchFromAvailableNode("/trips");
+}

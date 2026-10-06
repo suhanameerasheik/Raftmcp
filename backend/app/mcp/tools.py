@@ -2,11 +2,14 @@ from .schemas import (
     FlightStatusRequest,
     SearchFlightsRequest,
     SearchHotelsRequest,
+    BookHotelRequest,
 )
-from ..travel.simulator import (
-    check_flight_status,
+from app.travel.simulator import (
     search_flights,
+    check_flight_status,
     search_hotels,
+    book_hotel,
+    get_bookings,
 )
 
 
@@ -25,10 +28,16 @@ TOOLS = {
     },
     "search_hotels": {
         "name": "search_hotels",
-        "description": "Search available hotels.",
+        "description": "Search hotels by city, dates, and guests.",
         "input_schema": SearchHotelsRequest,
         "handler": search_hotels,
     },
+    "book_hotel": {
+    "name": "book_hotel",
+    "description": "Book a hotel for the selected dates and guests.",
+    "input_schema": BookHotelRequest,
+    "handler": book_hotel,
+},
 }
 
 

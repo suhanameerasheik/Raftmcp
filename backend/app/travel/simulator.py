@@ -1,5 +1,5 @@
 from .data import FLIGHTS, HOTELS
-
+BOOKINGS = []
 
 def search_flights(
     origin: str,
@@ -61,3 +61,36 @@ def search_hotels(
         "guests": guests,
         "results": matches,
     }
+def book_hotel(
+    hotel: str,
+    city: str,
+    check_in: str,
+    check_out: str,
+    guests: int = 1,
+) -> dict:
+    for item in HOTELS:
+        if (
+            item["hotel"].lower() == hotel.lower()
+            and item["city"].lower() == city.lower()
+        ):
+            booking = {
+                "booking_id": f"HOTEL-{len(BOOKINGS) + 1:04d}",
+                "hotel": item["hotel"],
+                "city": item["city"],
+                "check_in": check_in,
+                "check_out": check_out,
+                "guests": guests,
+                "price_per_night": item["price_per_night"],
+                "rating": item["rating"],
+                "status": "CONFIRMED",
+            }
+
+            BOOKINGS.append(booking)
+
+            return booking
+
+    raise ValueError("Hotel not found")
+
+
+def get_bookings() -> list[dict]:
+    return BOOKINGS

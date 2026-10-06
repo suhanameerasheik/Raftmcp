@@ -18,3 +18,9 @@ class SearchHotelsRequest(BaseModel):
     check_in: str | None = None
     check_out: str | None = None
     guests: int = 1
+class BookHotelRequest(BaseModel):
+    hotel: str
+    city: str
+    check_in: str
+    check_out: str
+    guests: int = 1

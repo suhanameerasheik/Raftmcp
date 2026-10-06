@@ -18,11 +18,13 @@ function App() {
   const [flightSearchData, setFlightSearchData] = useState(null);
 
   useEffect(() => {
-    async function checkBackend() {
+        async function checkBackend() {
       try {
-        await getHealth();
+        const health = await getHealth();
+        console.log("Backend health:", health);
         setBackendStatus("Connected");
       } catch (error) {
+        console.error("Backend health check failed:", error);
         setBackendStatus("Backend unavailable");
       }
     }
