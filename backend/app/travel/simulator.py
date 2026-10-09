@@ -61,6 +61,36 @@ def search_hotels(
         "guests": guests,
         "results": matches,
     }
+
+def prepare_hotel_booking(
+    hotel,
+    city,
+    check_in,
+    check_out,
+    guests=1,
+    booking_id=None,
+):
+    from uuid import uuid4
+
+    for item in HOTELS:
+        if (
+            item["hotel"].lower() == hotel.lower()
+            and item["city"].lower() == city.lower()
+        ):
+            return {
+                "booking_id": booking_id or f"HOTEL-{uuid4().hex[:8].upper()}",
+                "hotel": item["hotel"],
+                "city": item["city"],
+                "check_in": check_in,
+                "check_out": check_out,
+                "guests": guests,
+                "price_per_night": item["price_per_night"],
+                "rating": item["rating"],
+                "status": "CONFIRMED",
+            }
+
+    raise ValueError("Hotel not found")
+
 def book_hotel(
     hotel: str,
     city: str,

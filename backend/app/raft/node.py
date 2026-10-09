@@ -341,6 +341,21 @@ class RaftRuntime:
                 "commit_index": self.state.commit_index,
             }
 
+    async def run_heartbeat_loop(self):
+        while True:
+            if (
+                self.state.is_active
+                and self.state.role == NodeRole.LEADER
+            ):
+                try:
+                    await self.broadcast_commit()
+                except Exception as exc:
+                    print(
+                        f"[{self.state.node_id}] Heartbeat error: {exc}"
+                    )
+
+            await asyncio.sleep(0.5)
+
     async def broadcast_commit(self):
         if not self.state.is_active:
             return

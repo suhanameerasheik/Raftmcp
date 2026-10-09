@@ -1,13 +1,54 @@
 from app.raft.node import RaftRuntime
 from fastapi import FastAPI, HTTPException
+from pydantic import ValidationError
+import httpx
+from uuid import uuid4
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.mcp.tools import invoke_tool, list_tools
-from app.travel.simulator import get_bookings
-from app.config import NODE_ID
+from app.travel.simulator import prepare_hotel_booking
+from app.config import NODE_ID, PEERS, CLUSTER_NODES
+from app.mcp.schemas import BookHotelRequest
+from app.registry.commands import BOOK_HOTEL
+from app.raft.messages import (
+    AppendEntriesRequest,
+    RequestVoteRequest,
+)
 
 
-app = FastAPI(title="RaftMCP Travel")
+
+import asyncio
+from contextlib import asynccontextmanager
+
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    election_task = asyncio.create_task(
+        raft_node.run_election_loop()
+    )
+    heartbeat_task = asyncio.create_task(
+        raft_node.run_heartbeat_loop()
+    )
+
+    try:
+        yield
+    finally:
+        election_task.cancel()
+        heartbeat_task.cancel()
+
+        for task in (election_task, heartbeat_task):
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+
+app = FastAPI(
+    title="RaftMCP Travel",
+    lifespan=lifespan,
+)
+
 
 
 app.add_middleware(
@@ -25,8 +66,8 @@ app.add_middleware(
 
 raft_node = RaftRuntime(
     node_id=NODE_ID,
+    peers=PEERS,
 )
-
 
 # --------------------------------------------------
 # Helper
@@ -59,14 +100,26 @@ async def health():
 # Raft status
 # --------------------------------------------------
 
+
 @app.get("/raft/status")
 async def raft_status():
-    return {
-        "node_id": NODE_ID,
-        "state": raft_node.state,
-        "term": raft_node.current_term,
-        "leader_id": raft_node.leader_id,
-    }
+    return raft_node.status()
+
+
+@app.get("/raft/log")
+async def raft_log():
+    return raft_node.log_status()
+
+
+@app.post("/raft/request-vote")
+async def request_vote(request: RequestVoteRequest):
+    return raft_node.handle_request_vote(request)
+
+
+@app.post("/raft/append-entries")
+async def append_entries(request: AppendEntriesRequest):
+    return raft_node.handle_append_entries(request)
+
 
 
 # --------------------------------------------------
@@ -141,17 +194,79 @@ async def search_hotels(arguments: dict):
     )
 
 
+
 @app.post("/tools/book_hotel")
 async def book_hotel(arguments: dict):
-    return call_tool(
-        "book_hotel",
-        arguments,
-    )
+    try:
+        request = BookHotelRequest(**arguments)
+        booking_data = request.model_dump()
+        booking = prepare_hotel_booking(
+            **booking_data,
+            booking_id=f"HOTEL-{uuid4().hex[:8].upper()}",
+        )
+    except (ValidationError, ValueError, TypeError) as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+    # Forward booking requests received by a follower to its known leader.
+    if raft_node.state.role.value != "leader":
+        leader_id = raft_node.state.leader_id
+        leader_url = CLUSTER_NODES.get(leader_id)
+
+        if not leader_url:
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "message": "No known leader is available. Please retry.",
+                    "leader_id": leader_id,
+                },
+            )
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.post(
+                    f"{leader_url}/tools/book_hotel",
+                    json=booking_data,
+                )
+            if response.status_code >= 400:
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=response.json().get("detail", response.text),
+                )
+            return response.json()
+        except httpx.RequestError:
+            raise HTTPException(
+                status_code=503,
+                detail="The known leader could not be reached. Please retry.",
+            )
+
+    try:
+        result = await raft_node.submit_command({
+            "command": BOOK_HOTEL,
+            "booking": booking,
+        })
+    except RuntimeError as error:
+        raise HTTPException(status_code=503, detail=str(error))
+
+    if not result.get("success"):
+        raise HTTPException(status_code=503, detail=result)
+
+    return {
+        "booking": booking,
+        "raft": {
+            "committed": True,
+            "commit_index": result["commit_index"],
+            "acknowledgments": result["acknowledgments"],
+            "required": result["required"],
+        },
+    }
+
+
 @app.get("/trips")
 async def trips():
     return {
-        "trips": get_bookings()
+        "trips": raft_node.state.registry.list_bookings()
     }
+
 
 # --------------------------------------------------
 # AI Travel Agent
